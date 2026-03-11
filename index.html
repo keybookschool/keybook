@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>📘 키북스쿨 성장 보고서 자동 생성기 (Gemini 무료)</title>
+<title>📘 키북스쿨 성장 보고서 자동 생성기</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800;900&family=Noto+Serif+KR:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
@@ -47,7 +47,19 @@ button{cursor:pointer;font-family:'Noto Sans KR',sans-serif}
   box-shadow:0 4px 18px rgba(29,78,216,0.35)}
 .btn-start:disabled{opacity:0.5;cursor:not-allowed}
 
-/* API 모달 제거됨 - 키 내장 버전 */
+/* ── API 모달 ── */
+#api-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);
+  align-items:center;justify-content:center;z-index:999}
+#api-modal.show{display:flex}
+.modal-box{background:#fff;border-radius:20px;padding:36px 38px;max-width:440px;width:92%;
+  box-shadow:0 20px 60px rgba(0,0,0,0.2)}
+.modal-box h2{font-size:18px;font-weight:900;color:#1e293b;text-align:center;margin-bottom:5px}
+.modal-box p{font-size:12px;color:var(--gray600);text-align:center;line-height:1.7;margin-bottom:20px}
+.modal-box input{width:100%;border:1.5px solid var(--gray200);border-radius:10px;
+  padding:11px 14px;font-size:13px;font-family:'Noto Sans KR',sans-serif;margin-bottom:12px}
+.modal-box input:focus{border-color:var(--blue);outline:none}
+.btn-confirm{width:100%;background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;
+  border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:800}
 
 /* ── 처리 중 ── */
 #proc-ui{display:none;max-width:480px;margin:80px auto;text-align:center;padding:0 16px}
@@ -154,7 +166,19 @@ button{cursor:pointer;font-family:'Noto Sans KR',sans-serif}
 </head>
 <body>
 
-<!-- API 키는 앱에 내장됨 -->
+<!-- ── API 키 모달 ── -->
+<div id="api-modal">
+  <div class="modal-box">
+    <div style="font-size:32px;text-align:center;margin-bottom:10px">🔑</div>
+    <h2>Anthropic API 키</h2>
+    <p>AI 자동 분석을 위해 필요합니다.<br>키는 이 브라우저에서만 사용되며 외부로 전송되지 않아요.</p>
+    <input id="api-input" type="password" placeholder="sk-ant-api03-...">
+    <button class="btn-confirm" onclick="confirmKey()">확인 →</button>
+    <div style="margin-top:10px;font-size:11px;color:#94a3b8;text-align:center">
+      발급: <a href="https://console.anthropic.com" target="_blank" style="color:#3b82f6">console.anthropic.com</a>
+    </div>
+  </div>
+</div>
 
 <!-- ── 업로드 UI ── -->
 <div id="upload-ui">
@@ -179,7 +203,7 @@ button{cursor:pointer;font-family:'Noto Sans KR',sans-serif}
 
   <div class="info-box">
     💡 <strong>이렇게 사용하세요</strong><br>
-    Google Gemini AI(무료)가 결과지 PDF를 읽어 학생 정보, 점수, 피드백을 분석하고 동일한 스타일의 보고서를 자동으로 만들어줍니다.<br>
+    키북스쿨 레벨테스트 결과지 PDF를 올리면 AI가 학생 정보, 점수, 피드백을 읽어 오차윤 학생과 동일한 스타일의 보고서를 자동으로 만들어줍니다.<br>
     여러 회차 PDF를 함께 올리면 성장 추이 그래프도 생성돼요!
   </div>
 
@@ -215,7 +239,7 @@ button{cursor:pointer;font-family:'Noto Sans KR',sans-serif}
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-let API_KEY = 'AIzaSyBlRZ0cySBSu_d6CIYmqA9t9WyzSzFl1pE'; // Google Gemini API 키 입력 (무료)
+let API_KEY = '';
 let files = [];
 
 /* ── 드래그&드롭 ── */
@@ -252,10 +276,16 @@ function renderFiles() {
 /* ── API 키 ── */
 function startAnalysis() {
   if (!files.length) return;
-  if (!API_KEY) { alert('API 키가 없습니다.'); return; }
+  if (!API_KEY) { document.getElementById('api-modal').classList.add('show'); }
+  else { runAnalysis(); }
+}
+function confirmKey() {
+  const k = document.getElementById('api-input').value.trim();
+  if (!k.startsWith('sk-')) { alert('올바른 API 키를 입력해주세요 (sk-ant-... 형식)'); return; }
+  API_KEY = k;
+  document.getElementById('api-modal').classList.remove('show');
   runAnalysis();
 }
-function confirmKey() { /* 내장 키 버전에서는 사용 안 함 */ }
 
 /* ── PDF → base64 (1페이지) ── */
 async function pdfToB64(file) {
@@ -316,8 +346,15 @@ async function runAnalysis() {
 }
 
 async function callClaude(images) {
-  // Gemini API 버전 (완전 무료)
-  const PROMPT = `
+  const content = [];
+
+  // 이미지들 추가
+  for (const img of images) {
+    content.push({type:'text', text:`=== 결과지 파일: ${img.name} ===`});
+    content.push({type:'image', source:{type:'base64', media_type:'image/jpeg', data:img.b64}});
+  }
+
+  content.push({type:'text', text: `
 위 키북스쿨(Kids Booktory) 레벨테스트 결과지를 분석해서 아래 JSON 형식으로 정확하게 추출해주세요.
 여러 회차 결과지가 있으면 tests 배열에 날짜순으로 모두 포함하세요.
 숫자는 반드시 숫자형으로, 없는 항목은 null로.
@@ -348,42 +385,34 @@ async function callClaude(images) {
   "nextStepReason": "추천 이유 원문 (없으면 null)"
 }
 
-JSON만 출력하세요. 마크다운 코드블록 없이 순수 JSON만.
-`;
+JSON만 출력하세요. 다른 텍스트 없이.
+`});
 
-  // Gemini API 요청 본문 구성
-  const parts = [];
-  for (const img of images) {
-    parts.push({ text: `=== 결과지 파일: ${img.name} ===` });
-    parts.push({ inline_data: { mime_type: 'image/jpeg', data: img.b64 } });
-  }
-  parts.push({ text: PROMPT });
-
-  const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts }] })
-    }
-  );
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': API_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{role:'user', content}]
+    })
+  });
 
   if (!resp.ok) {
     const err = await resp.json().catch(()=>({}));
-    const msg = err.error?.message || resp.statusText;
-    if (resp.status === 400) throw new Error(`API 키가 올바르지 않아요. Google AI Studio에서 키를 확인해주세요.\n(${msg})`);
-    if (resp.status === 429) throw new Error(`무료 사용량을 초과했어요. 1분 후 다시 시도해주세요.\n(분당 15회 제한)`);
-    throw new Error(`Gemini API 오류 (${resp.status}): ${msg}`);
+    throw new Error(`API 오류 (${resp.status}): ${err.error?.message || resp.statusText}`);
   }
 
   const result = await resp.json();
-  const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  const clean = text.trim().replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
-
+  const text = result.content[0].text.trim().replace(/```json|```/g,'').trim();
   try {
-    return JSON.parse(clean);
+    return JSON.parse(text);
   } catch(e) {
-    console.error('파싱 실패 원문:', text);
     throw new Error('AI 응답을 파싱할 수 없었어요. 결과지 PDF가 맞는지 확인해주세요.');
   }
 }
@@ -753,4 +782,3 @@ function resetAll() {
 </script>
 </body>
 </html>
-
