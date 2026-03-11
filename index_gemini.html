@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>📘 키북스쿨 성장 보고서 자동 생성기 (Gemini 무료)</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800;900&family=Noto+Serif+KR:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#1a2e4a;--blue:#1d4ed8;
+  --cream:#fffbeb;
+  --gray50:#f8fafc;--gray100:#f1f5f9;--gray200:#e2e8f0;
+  --gray400:#94a3b8;--gray600:#475569;--gray800:#1e293b;
+}
+body{font-family:'Noto Sans KR',sans-serif;background:#f0f4f8;color:var(--gray800)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+button{cursor:pointer;font-family:'Noto Sans KR',sans-serif}
+
+/* ── 업로드 UI ── */
+#upload-ui{max-width:620px;margin:0 auto;padding:48px 16px}
+.logo-row{text-align:center;margin-bottom:32px}
+.logo-row .brand{font-size:10px;color:var(--gray400);letter-spacing:4px;margin-bottom:6px}
+.logo-row h1{font-size:24px;font-weight:900;color:var(--navy)}
+.logo-row p{font-size:13px;color:var(--gray400);margin-top:5px}
+
+.drop-zone{border:2.5px dashed #cbd5e1;background:#fff;border-radius:20px;padding:52px 28px;
+  text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:14px}
+.drop-zone:hover,.drop-zone.over{border-color:var(--blue);background:#eff6ff}
+.drop-zone .dz-icon{font-size:44px;margin-bottom:12px}
+.drop-zone h2{font-size:15px;font-weight:800;color:#334155;margin-bottom:5px}
+.drop-zone p{font-size:12.5px;color:var(--gray400)}
+
+.file-list{background:#fff;border-radius:14px;padding:6px 18px;box-shadow:0 2px 10px rgba(0,0,0,0.06);margin-bottom:12px}
+.file-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--gray100)}
+.file-item:last-child{border-bottom:none}
+.file-name{font-size:13px;font-weight:600;color:#334155}
+.btn-remove{background:none;border:none;color:#ef4444;font-size:18px;font-weight:700;line-height:1}
+
+.info-box{background:linear-gradient(135deg,#fef9ee,#fff7ed);border:1.5px solid #fed7aa;border-radius:14px;padding:14px 18px;margin-bottom:14px;font-size:12px;color:#78350f;line-height:1.75}
+.info-box strong{font-weight:800}
+
+.btn-start{width:100%;background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;
+  border:none;border-radius:13px;padding:15px;font-size:15px;font-weight:800;
+  box-shadow:0 4px 18px rgba(29,78,216,0.35)}
+.btn-start:disabled{opacity:0.5;cursor:not-allowed}
+
+/* API 모달 제거됨 - 키 내장 버전 */
+
+/* ── 처리 중 ── */
+#proc-ui{display:none;max-width:480px;margin:80px auto;text-align:center;padding:0 16px}
+.spinner{width:52px;height:52px;border:4px solid #e2e8f0;border-top:4px solid var(--blue);
+  border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px}
+#proc-msg{font-size:13px;color:var(--gray400);margin-top:10px;min-height:40px;line-height:1.7}
+
+/* ── 에러 ── */
+#error-ui{display:none;max-width:500px;margin:60px auto;text-align:center;padding:0 16px}
+
+/* ══════════════════════════════════
+   보고서 스타일 (오차윤 동일)
+═══════════════════════════════════ */
+#report-ui{display:none;animation:fadeIn 0.4s ease}
+.rp{max-width:800px;margin:0 auto;padding:24px 16px 80px}
+
+.cover{background:linear-gradient(155deg,var(--navy) 0%,#1e3f7a 50%,#1d4ed8 100%);
+  border-radius:24px;padding:44px 48px 36px;color:#fff;position:relative;overflow:hidden;margin-bottom:20px}
+.cover::before{content:'';position:absolute;top:-80px;right:-80px;width:320px;height:320px;border-radius:50%;background:rgba(255,255,255,0.04)}
+.cover::after{content:'';position:absolute;bottom:-60px;left:20%;width:240px;height:240px;border-radius:50%;background:rgba(255,255,255,0.03)}
+.cover-tag{font-size:10px;letter-spacing:4px;opacity:0.55;font-weight:600;margin-bottom:10px}
+.cover-title{font-size:28px;font-weight:900;letter-spacing:-1px;margin-bottom:4px;font-family:'Noto Serif KR',serif}
+.cover-sub{font-size:13px;opacity:0.7;margin-bottom:30px}
+.cover-stats{display:flex;position:relative;z-index:1}
+.s-box{flex:1;padding:16px 0;border-right:1px solid rgba(255,255,255,0.1);text-align:center}
+.s-box:last-child{border-right:none}
+.s-icon{font-size:18px;margin-bottom:5px}
+.s-val{font-size:19px;font-weight:900;margin-bottom:2px}
+.s-label{font-size:9px;opacity:0.6;letter-spacing:1px}
+.cover-badge{position:absolute;top:34px;right:44px;z-index:2;
+  background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);
+  border-radius:50px;padding:7px 16px;font-size:11px;font-weight:700}
+
+.card{background:#fff;border-radius:18px;padding:26px 30px;margin-bottom:16px;box-shadow:0 2px 16px rgba(0,0,0,0.05)}
+.card-title{font-size:14px;font-weight:800;color:var(--navy);margin-bottom:3px}
+.card-sub{font-size:11px;color:var(--gray400);margin-bottom:18px}
+
+.intro-card{background:linear-gradient(135deg,#fef9ee,#fff7ed);border:1.5px solid #fed7aa;border-radius:18px;padding:24px 28px;margin-bottom:16px}
+.intro-hl{display:inline-block;background:#fde68a;border-radius:4px;padding:1px 6px;font-weight:700}
+
+.trio{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:18px}
+.trio-box{border-radius:14px;padding:18px;text-align:center}
+.t-label{font-size:9px;font-weight:700;letter-spacing:1.5px;margin-bottom:8px;opacity:0.7}
+.t-val{font-size:22px;font-weight:900;margin-bottom:3px}
+.t-desc{font-size:10px;opacity:0.7}
+
+.chart-wrap{background:var(--gray50);border-radius:12px;padding:16px 14px}
+
+.d-row{display:flex;align-items:center;gap:12px;margin-bottom:13px}
+.d-label{width:76px;flex-shrink:0;font-size:12px;font-weight:700}
+.d-bars{flex:1;position:relative}
+.bar-track{background:var(--gray100);border-radius:6px;height:10px;position:relative}
+.bar-avg{position:absolute;height:10px;border-radius:6px;background:var(--gray200)}
+.bar-mine{position:absolute;height:10px;border-radius:6px}
+.d-score{width:70px;flex-shrink:0;text-align:right;font-size:11.5px}
+
+.fi{border-radius:12px;padding:15px 16px;border-left:4px solid}
+.fi-title{font-size:11.5px;font-weight:800;margin-bottom:4px}
+.fi-score{font-size:17px;font-weight:900;margin-bottom:4px}
+.fi-score span{font-size:10px;font-weight:500;opacity:0.7;margin-left:3px}
+.fi-text{font-size:11px;line-height:1.8;word-break:keep-all}
+
+.cmp-table{width:100%;border-collapse:collapse;font-size:12px}
+.cmp-table th{background:var(--navy);color:#fff;padding:9px 12px;text-align:center;font-weight:700;font-size:11px}
+.cmp-table th:first-child{border-radius:7px 0 0 0}
+.cmp-table th:last-child{border-radius:0 7px 0 0}
+.cmp-table td{padding:9px 12px;text-align:center;border-bottom:1px solid var(--gray100)}
+.cmp-table tr:nth-child(even) td{background:var(--gray50)}
+.cmp-table .il{text-align:left;font-weight:600;color:var(--gray600)}
+.b-up{background:#dcfce7;color:#166534;border-radius:20px;padding:2px 9px;font-weight:700;font-size:11px}
+.b-lv{background:var(--blue);color:#fff;border-radius:20px;padding:2px 11px;font-weight:800;font-size:11px}
+
+.nextstep{background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #bfdbfe;border-radius:18px;padding:24px 28px;margin-bottom:16px}
+.step-badge{display:inline-flex;align-items:center;gap:7px;background:var(--blue);color:#fff;border-radius:50px;padding:6px 16px;font-size:12px;font-weight:800;margin-bottom:14px}
+
+.msg-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:16px}
+.msg-box{border-radius:16px;padding:22px 24px}
+.msg-box.parent{background:var(--cream);border:1.5px solid #fde68a}
+.msg-box.student{background:#f0fdf4;border:1.5px solid #86efac}
+.msg-tag{font-size:9px;font-weight:700;letter-spacing:1.5px;margin-bottom:8px;opacity:0.65}
+.msg-title{font-size:13px;font-weight:800;margin-bottom:10px}
+.msg-text{font-size:12px;line-height:1.9;word-break:keep-all}
+.msg-box.parent .msg-title{color:#92400e}
+.msg-box.parent .msg-text{color:#78350f}
+.msg-box.student .msg-title{color:#166534}
+.msg-box.student .msg-text{color:#14532d}
+
+/* ── 하단 버튼 ── */
+.fab-print{position:fixed;bottom:28px;right:28px;background:linear-gradient(135deg,var(--navy),var(--blue));
+  color:#fff;border:none;border-radius:50px;padding:13px 24px;font-size:13px;font-weight:800;
+  cursor:pointer;box-shadow:0 6px 24px rgba(29,78,216,0.4);display:flex;align-items:center;gap:7px;z-index:100}
+.fab-reset{position:fixed;bottom:28px;left:28px;background:#fff;color:var(--navy);
+  border:1.5px solid var(--gray200);border-radius:50px;padding:12px 20px;font-size:13px;font-weight:700;
+  cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.08);display:flex;align-items:center;gap:7px;z-index:100}
+
+@media print{
+  .fab-print,.fab-reset,#upload-ui,#proc-ui,#error-ui{display:none!important}
+  body{background:#fff;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .rp{padding:0}
+  .card,.cover,.msg-box,.nextstep,.intro-card{box-shadow:none!important}
+}
+@page{size:A4;margin:13mm 10mm}
+</style>
+</head>
+<body>
+
+<!-- API 키는 앱에 내장됨 -->
+
+<!-- ── 업로드 UI ── -->
+<div id="upload-ui">
+  <div class="logo-row">
+    <div class="brand">KIDS BOOKTORY</div>
+    <h1>📘 성장 보고서 자동 생성기</h1>
+    <p>레벨테스트 결과지 PDF 업로드 → 부모님용 성장 보고서 자동 생성</p>
+  </div>
+
+  <div class="drop-zone" id="dz"
+    onclick="document.getElementById('fi').click()"
+    ondragover="dzEv(event,'over')" ondragleave="dzEv(event,'leave')" ondrop="dzEv(event,'drop')">
+    <input type="file" id="fi" accept=".pdf" multiple style="display:none" onchange="addFiles(this.files)">
+    <div class="dz-icon">📂</div>
+    <h2>결과지 PDF를 드래그하거나 클릭해서 올려주세요</h2>
+    <p>여러 회차를 함께 올리면 성장 변화까지 분석합니다</p>
+  </div>
+
+  <div id="file-area" style="display:none">
+    <div class="file-list" id="file-list"></div>
+  </div>
+
+  <div class="info-box">
+    💡 <strong>이렇게 사용하세요</strong><br>
+    Google Gemini AI(무료)가 결과지 PDF를 읽어 학생 정보, 점수, 피드백을 분석하고 동일한 스타일의 보고서를 자동으로 만들어줍니다.<br>
+    여러 회차 PDF를 함께 올리면 성장 추이 그래프도 생성돼요!
+  </div>
+
+  <button class="btn-start" id="btn-start" onclick="startAnalysis()" disabled>
+    🤖 AI 분석 시작
+  </button>
+</div>
+
+<!-- ── 처리 중 UI ── -->
+<div id="proc-ui">
+  <div class="spinner"></div>
+  <div style="font-size:17px;font-weight:800;color:#1e293b">AI가 결과지를 분석 중입니다</div>
+  <div id="proc-msg">PDF 이미지 변환 중...</div>
+  <div style="margin-top:20px;font-size:12px;color:#cbd5e1">보통 20~40초 소요됩니다</div>
+</div>
+
+<!-- ── 에러 UI ── -->
+<div id="error-ui">
+  <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+  <div style="font-size:17px;font-weight:800;color:#1e293b;margin-bottom:8px">분석 중 오류가 발생했어요</div>
+  <div id="error-msg" style="font-size:13px;color:#64748b;line-height:1.7;margin-bottom:24px"></div>
+  <button onclick="resetAll()" style="background:var(--blue);color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:14px;font-weight:700">← 다시 시도</button>
+</div>
+
+<!-- ── 보고서 ── -->
+<div id="report-ui">
+  <div class="rp" id="report-body"></div>
+</div>
+<button class="fab-print" id="fab-print" style="display:none" onclick="window.print()">🖨️ PDF 저장 / 출력</button>
+<button class="fab-reset" id="fab-reset" style="display:none" onclick="resetAll()">← 새 보고서</button>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let API_KEY = 'AIzaSyBlRZ0cySBSu_d6CIYmqA9t9WyzSzFl1pE'; // Google Gemini API 키 입력 (무료)
+let files = [];
+
+/* ── 드래그&드롭 ── */
+function dzEv(e, t) {
+  e.preventDefault();
+  const dz = document.getElementById('dz');
+  if (t === 'over') dz.classList.add('over');
+  else if (t === 'leave') dz.classList.remove('over');
+  else { dz.classList.remove('over'); addFiles(e.dataTransfer.files); }
+}
+function addFiles(fs) {
+  const pdfs = Array.from(fs).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (!pdfs.length) { alert('PDF 파일만 업로드할 수 있어요.'); return; }
+  files = [...files, ...pdfs];
+  renderFiles();
+}
+function removeFile(i) { files.splice(i,1); renderFiles(); }
+function renderFiles() {
+  const area = document.getElementById('file-area');
+  const list = document.getElementById('file-list');
+  const btn  = document.getElementById('btn-start');
+  area.style.display = files.length ? 'block' : 'none';
+  btn.disabled = !files.length;
+  list.innerHTML = files.map((f,i) => `
+    <div class="file-item">
+      <div style="display:flex;align-items:center;gap:9px">
+        <span style="font-size:18px">📑</span>
+        <span class="file-name">${f.name}</span>
+      </div>
+      <button class="btn-remove" onclick="removeFile(${i})">×</button>
+    </div>`).join('');
+}
+
+/* ── API 키 ── */
+function startAnalysis() {
+  if (!files.length) return;
+  if (!API_KEY || API_KEY === 'AIzaSyBlRZ0cySBSu_d6CIYmqA9t9WyzSzFl1pE') { alert('관리자에게 Gemini API 키 설정을 요청하세요.'); return; }
+  runAnalysis();
+}
+function confirmKey() { /* 내장 키 버전에서는 사용 안 함 */ }
+
+/* ── PDF → base64 (1페이지) ── */
+async function pdfToB64(file) {
+  const ab = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: ab}).promise;
+  // 여러 페이지를 하나의 긴 캔버스에 합치기
+  const pageCount = Math.min(pdf.numPages, 4);
+  const canvases = [];
+  let totalHeight = 0, maxWidth = 0;
+  for (let p = 1; p <= pageCount; p++) {
+    const page = await pdf.getPage(p);
+    const vp = page.getViewport({scale: 1.6});
+    const cv = document.createElement('canvas');
+    cv.width = vp.width; cv.height = vp.height;
+    await page.render({canvasContext: cv.getContext('2d'), viewport: vp}).promise;
+    canvases.push(cv);
+    totalHeight += vp.height;
+    maxWidth = Math.max(maxWidth, vp.width);
+  }
+  // 세로로 합치기
+  const merged = document.createElement('canvas');
+  merged.width = maxWidth; merged.height = totalHeight;
+  const ctx = merged.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, maxWidth, totalHeight);
+  let y = 0;
+  for (const cv of canvases) { ctx.drawImage(cv, 0, y); y += cv.height; }
+  return merged.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+
+/* ── 메인 분석 ── */
+async function runAnalysis() {
+  show('proc');
+
+  try {
+    // 1. PDF → 이미지
+    setMsg('PDF를 이미지로 변환 중...');
+    const images = [];
+    for (let i = 0; i < files.length; i++) {
+      setMsg(`PDF ${i+1}/${files.length} 변환 중...`);
+      const b64 = await pdfToB64(files[i]);
+      images.push({name: files[i].name, b64});
+    }
+
+    // 2. Claude API 호출
+    setMsg('AI가 결과지를 읽고 분석 중...\n(보통 20~30초 소요됩니다)');
+    const data = await callClaude(images);
+
+    // 3. 보고서 렌더
+    setMsg('보고서를 생성 중...');
+    renderReport(data);
+    show('report');
+
+  } catch(e) {
+    console.error(e);
+    document.getElementById('error-msg').textContent = e.message || '알 수 없는 오류가 발생했습니다.';
+    show('error');
+  }
+}
+
+async function callClaude(images) {
+  // Gemini API 버전 (완전 무료)
+  const PROMPT = `
+위 키북스쿨(Kids Booktory) 레벨테스트 결과지를 분석해서 아래 JSON 형식으로 정확하게 추출해주세요.
+여러 회차 결과지가 있으면 tests 배열에 날짜순으로 모두 포함하세요.
+숫자는 반드시 숫자형으로, 없는 항목은 null로.
+
+{
+  "name": "학생 이름",
+  "tests": [
+    {
+      "date": "YYYY년 M월",
+      "grade": "초등학교 N학년",
+      "totalLevel": "Lv.XH 또는 Lv.XL",
+      "topPercent": "상위 XX.XX%",
+      "time": "XX분 XX초",
+      "ar": "X.X - X.X",
+      "kbStep": "step X-X",
+      "aiGrade": "초X~초X (있으면)",
+      "domains": {
+        "단어":  {"mine": 숫자, "avg": 숫자},
+        "듣기":  {"mine": 숫자, "avg": 숫자},
+        "읽기":  {"mine": 숫자, "avg": 숫자},
+        "쓰기":  {"mine": 숫자, "avg": 숫자},
+        "말하기": {"mine": 숫자, "avg": 숫자}
+      }
+    }
+  ],
+  "teacherComment": "결과지에 있는 선생님 코멘트 원문 (없으면 null)",
+  "nextStep": "추천 단계 (예: STEP 6 - Read On 3.0, 없으면 null)",
+  "nextStepReason": "추천 이유 원문 (없으면 null)"
+}
+
+JSON만 출력하세요. 마크다운 코드블록 없이 순수 JSON만.
+`;
+
+  // Gemini API 요청 본문 구성
+  const parts = [];
+  for (const img of images) {
+    parts.push({ text: `=== 결과지 파일: ${img.name} ===` });
+    parts.push({ inline_data: { mime_type: 'image/jpeg', data: img.b64 } });
+  }
+  parts.push({ text: PROMPT });
+
+  const resp = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts }] })
+    }
+  );
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(()=>({}));
+    const msg = err.error?.message || resp.statusText;
+    if (resp.status === 400) throw new Error(`API 키가 올바르지 않아요. Google AI Studio에서 키를 확인해주세요.\n(${msg})`);
+    if (resp.status === 429) throw new Error(`무료 사용량을 초과했어요. 1분 후 다시 시도해주세요.\n(분당 15회 제한)`);
+    throw new Error(`Gemini API 오류 (${resp.status}): ${msg}`);
+  }
+
+  const result = await resp.json();
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const clean = text.trim().replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
+
+  try {
+    return JSON.parse(clean);
+  } catch(e) {
+    console.error('파싱 실패 원문:', text);
+    throw new Error('AI 응답을 파싱할 수 없었어요. 결과지 PDF가 맞는지 확인해주세요.');
+  }
+}
+
+/* ══ 보고서 렌더링 ══ */
+const DC = {단어:'#FF6B6B',듣기:'#54A0FF',읽기:'#1DD1A1',쓰기:'#FECA57',말하기:'#FF9F43'};
+const DI = {단어:'📝',듣기:'🎧',읽기:'📖',쓰기:'✏️',말하기:'🗣'};
+const FBG = {단어:'#fff0f0',듣기:'#eff9ff',읽기:'#f0fdf9',쓰기:'#fefce8',말하기:'#fff5eb'};
+const FTC = {단어:'#7f1d1d',듣기:'#1e3a5f',읽기:'#14532d',쓰기:'#78350f',말하기:'#7c4018'};
+
+function pLv(s) {
+  if (!s) return 0;
+  const m = s.toString().match(/(\d+(\.\d+)?)/);
+  if (!m) return 0;
+  let v = parseFloat(m[1]);
+  if (s.toString().includes('H')) v += 0.5;
+  return v;
+}
+
+function lvToY(v, bottom=138, range=110) { return bottom - (v/10)*range; }
+
+function renderReport(d) {
+  const tests = d.tests || [];
+  if (!tests.length) throw new Error('테스트 데이터를 찾을 수 없었어요.');
+
+  const latest = tests[tests.length-1];
+  const first  = tests[0];
+  const name   = d.name || '학생';
+  const chg    = (pLv(latest.totalLevel) - pLv(first.totalLevel)).toFixed(1);
+  const isUp   = parseFloat(chg) >= 0;
+  const today  = new Date(); const dateStr = `${today.getFullYear()}년 ${today.getMonth()+1}월`;
+
+  // AI 예측 학년 (있으면 사용, 없으면 생략)
+  const aiGrade = latest.aiGrade || null;
+
+  // 커버 stat 항목
+  const stats = [
+    {icon:'🏆', val: latest.totalLevel, label:'최근 달성 레벨'},
+    {icon:'🚀', val: latest.topPercent?.replace('상위 ','').replace('%','%'), label:'전국 동일 학년'},
+    aiGrade ? {icon:'📚', val: aiGrade, label:'AI 예측 학년'} : null,
+    {icon:'⏱️', val: latest.time, label:'소요 시간'},
+  ].filter(Boolean);
+
+  // 성장 그래프 SVG
+  const svgGraph = buildGraph(tests);
+
+  // 영역별 막대
+  const domains = latest.domains || {};
+  const domainOrder = ['듣기','말하기','단어','읽기','쓰기'];
+  const domainKeys = domainOrder.filter(k => domains[k]?.mine != null);
+
+  const barRows = domainKeys.map(k => {
+    const v = domains[k];
+    const mine = v.mine || 0, avg = v.avg || 0;
+    const c = DC[k] || '#888';
+    return `<div class="d-row">
+      <div class="d-label">${DI[k]||'•'} ${k}</div>
+      <div class="d-bars">
+        <div class="bar-track">
+          <div class="bar-avg" style="width:${avg*10}%"></div>
+          <div class="bar-mine" style="width:${mine*10}%;background:linear-gradient(90deg,${c}88,${c})"></div>
+        </div>
+      </div>
+      <div class="d-score"><span style="font-weight:800;color:${c}">${mine}</span> <span style="color:#94a3b8;font-size:10px">/ 평균 ${avg}</span></div>
+    </div>`;
+  }).join('');
+
+  // 영역별 칭찬 카드 (3+2 or 2+2 레이아웃)
+  const fbCards = buildFeedbackCards(domainKeys, domains, name);
+
+  // 비교표 (테스트 2개 이상일 때만)
+  const compareSection = tests.length >= 2 ? buildCompareTable(tests, name) : '';
+
+  // 1회차만 있을 때 인트로 메시지
+  const singleTest = tests.length === 1;
+
+  const html = `
+<div class="cover">
+  <div class="cover-badge">📅 ${dateStr} 기준</div>
+  <div class="cover-tag">KIDS BOOKTORY · 성장 보고서</div>
+  <div class="cover-title">${name} 학생의 영어 성장 이야기</div>
+  <div class="cover-sub">${singleTest ? '이번 테스트 종합 분석 보고서' : `${first.date} ~ ${latest.date} · ${tests.length}회 테스트 종합 분석`}</div>
+  <div class="cover-stats">
+    ${stats.map(s=>`<div class="s-box"><div class="s-icon">${s.icon}</div><div class="s-val">${s.val||'—'}</div><div class="s-label">${s.label}</div></div>`).join('')}
+  </div>
+</div>
+
+<div class="intro-card">
+  <div style="font-size:14px;font-weight:800;color:#92400e;margin-bottom:11px">💡 ${name.replace(/\s.*$/,'')}이의 영어, 잘하고 있어요!</div>
+  <p style="font-size:13px;color:#78350f;line-height:1.95;word-break:keep-all">
+    안녕하세요! ${name} 학생이 이번 레벨 테스트에서 정말 멋진 결과를 보여주었어요. 영어는 한꺼번에 다 잘할 필요가 없어요. 🌱<br>
+    아기가 말을 배울 때처럼, <span class="intro-hl">듣기 → 말하기 → 읽기 → 쓰기</span> 순서로 자연스럽게 발달해요.
+    지금 영역마다 점수가 조금씩 다른 것은 '문제'가 아니라, 영어를 진짜 언어로 받아들이고 있다는 가장 건강한 증거예요! 👏
+  </p>
+</div>
+
+${!singleTest ? `
+<div class="card">
+  <div class="card-title">📈 성장 변화 한눈에 보기</div>
+  <div class="card-sub">${first.date} 첫 테스트 → ${latest.date} 최근 테스트</div>
+  <div class="trio">
+    <div class="trio-box" style="background:#fff7ed;border:1.5px solid #fed7aa">
+      <div class="t-label" style="color:#92400e">첫 번째 테스트</div>
+      <div class="t-val" style="color:#92400e">${first.totalLevel}</div>
+      <div class="t-desc" style="color:#b45309">${first.date}</div>
+    </div>
+    <div class="trio-box" style="background:${isUp?'linear-gradient(135deg,#f0fdf4,#dcfce7)':'#fff1f2'};border:1.5px solid ${isUp?'#86efac':'#fecaca'}">
+      <div class="t-label" style="color:${isUp?'#166534':'#991b1b'}">성장 변화</div>
+      <div class="t-val" style="color:${isUp?'#166534':'#991b1b'}">${isUp?'+':''}${chg}${isUp?'↑':'↓'}</div>
+      <div class="t-desc" style="color:${isUp?'#16a34a':'#dc2626'}">${isUp?'꾸준한 성장 중 🌱':'다시 도전! 💪'}</div>
+    </div>
+    <div class="trio-box" style="background:#eff6ff;border:1.5px solid #bfdbfe">
+      <div class="t-label" style="color:#1e40af">최근 테스트</div>
+      <div class="t-val" style="color:#1e40af">${latest.totalLevel}</div>
+      <div class="t-desc" style="color:#3b82f6">${latest.date}</div>
+    </div>
+  </div>
+  <div class="chart-wrap">
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:10px;font-weight:600">${tests.length}회 테스트 종합 레벨 변화</div>
+    ${svgGraph}
+  </div>
+</div>` : ''}
+
+<div class="card">
+  <div class="card-title">📊 이번 테스트 결과 (${latest.date})</div>
+  <div class="card-sub">${latest.grade} · ${latest.topPercent}</div>
+  <table class="cmp-table" style="margin-bottom:0">
+    <thead><tr>
+      <th style="text-align:left">항목</th><th>결과</th><th>의미</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="il">🏆 달성 레벨</td><td><span class="b-lv">${latest.totalLevel}</span></td><td style="color:#166534;font-weight:600">이번 성취 레벨</td></tr>
+      <tr><td class="il">🚀 전국 상위</td><td><span class="b-up">${latest.topPercent}</span></td><td style="color:#166534;font-weight:600">매우 우수</td></tr>
+      ${aiGrade ? `<tr><td class="il">📚 AI 예측 학년</td><td style="font-weight:700;color:#1d4ed8">${aiGrade}</td><td style="color:#1e40af;font-size:11px">실제보다 앞서가요!</td></tr>` : ''}
+      ${latest.kbStep ? `<tr><td class="il">📖 책 읽기 단계</td><td style="font-weight:600">${latest.kbStep}</td><td style="color:#475569;font-size:11px">AR ${latest.ar||'—'}</td></tr>` : ''}
+      ${latest.time ? `<tr><td class="il">⏱️ 소요 시간</td><td style="font-weight:700">${latest.time}</td><td>${buildTimeDiff(tests)}</td></tr>` : ''}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card-title">⭐ 영역별 점수 & 칭찬 포인트 <span style="font-size:10px;color:#94a3b8;font-weight:400">(최근 테스트 기준)</span></div>
+  <div class="card-sub">컬러 막대 = ${name} 점수 · 회색 막대 = 같은 학년 평균</div>
+  <div style="margin-bottom:20px">${barRows}</div>
+  ${fbCards}
+</div>
+
+${compareSection}
+
+${buildNextStep(d, name)}
+
+<div class="msg-grid">
+  <div class="msg-box parent">
+    <div class="msg-tag">💙 학부모님께</div>
+    <div class="msg-title">아이만의 속도를 믿어주세요 🌸</div>
+    <div class="msg-text">아이들은 저마다의 속도로, 자신만의 계절에 꽃을 피웁니다. 지금 ${name.replace(/\s.*$/,'')}이가 보여주는 영역별 차이는 영어를 '공부'가 아닌 살아있는 '언어'로 받아들이고 있다는 가장 건강한 증거예요.<br><br>${isUp && !singleTest ? `${name.replace(/\s.*$/,'')}이는 꾸준히 성장하고 있어요. 지금처럼 영어를 즐겁게 누릴 수 있도록 응원해 주세요! 💛` : `${name.replace(/\s.*$/,'')}이의 잠재력을 믿고 함께 응원해 주세요! 💛`}</div>
+  </div>
+  <div class="msg-box student">
+    <div class="msg-tag">🌟 ${name.replace(/\s.*$/,'')}이에게!</div>
+    <div class="msg-title">정말 잘하고 있어! 파이팅! 🎉</div>
+    <div class="msg-text">${name.replace(/\s.*$/,'')}아, 이번 테스트 정말 잘했어! ${buildStudentMsg(tests, name)}<br><br>앞으로도 지금처럼만 해줘! 선생님들은 항상 응원하고 있어. 파이팅! 🚀</div>
+  </div>
+</div>
+
+${d.teacherComment ? `
+<div class="card" style="background:linear-gradient(135deg,#fff,#fefce8);border:1.5px solid #fde68a">
+  <div class="card-title">💬 선생님 한마디</div>
+  <div style="font-size:13px;color:#78350f;line-height:1.95;margin-top:10px;word-break:keep-all">${d.teacherComment}</div>
+</div>` : ''}
+
+<div style="text-align:center;padding:12px;font-size:10px;color:#cbd5e1">
+  KIDS BOOKTORY · 키북스쿨 성장 보고서 · 생성일: ${dateStr}
+</div>`;
+
+  document.getElementById('report-body').innerHTML = html;
+  document.getElementById('fab-print').style.display = 'flex';
+  document.getElementById('fab-reset').style.display = 'flex';
+}
+
+/* ── 그래프 SVG 빌더 ── */
+function buildGraph(tests) {
+  const W=680, H=160, L=58, R=640, B=138, range=110;
+  const n = tests.length;
+  const vals = tests.map(t => pLv(t.totalLevel));
+  const maxV = Math.max(...vals, 8);
+  const xs = n === 1 ? [W/2] : tests.map((_, i) => L + (R-L)/(n-1)*i);
+  const ys = vals.map(v => B - (v/maxV)*range);
+  const path = xs.map((x,i) => `${i===0?'M':'L'}${x},${ys[i]}`).join(' ');
+  const area = path + ` L${xs[xs.length-1]},${B} L${xs[0]},${B} Z`;
+
+  const gridVals = [2,4,6,8,10].filter(v=>v<=maxV+1);
+  const grids = gridVals.map(v => {
+    const y = B - (v/maxV)*range;
+    return `<line x1="${L}" x2="${R}" y1="${y}" y2="${y}" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="${L-6}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="10" fill="#94a3b8">Lv.${v}</text>`;
+  }).join('');
+
+  const dots = xs.map((x,i) => `
+    <circle cx="${x}" cy="${ys[i]}" r="9" fill="white" stroke="#3b82f6" stroke-width="3"/>
+    <text x="${x}" y="${ys[i]-14}" text-anchor="middle" font-size="12" fill="#1e40af" font-weight="700">${tests[i].totalLevel}</text>
+    <text x="${x}" y="${H-4}" text-anchor="middle" font-size="9.5" fill="#64748b">${tests[i].date}</text>`).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="overflow:visible">
+    <defs><linearGradient id="lg_g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+    </linearGradient></defs>
+    ${grids}
+    <path d="${area}" fill="url(#lg_g)"/>
+    <path d="${path}" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    ${dots}
+  </svg>`;
+}
+
+/* ── 피드백 카드 빌더 ── */
+function buildFeedbackCards(keys, domains, name) {
+  const firstName = name.replace(/\s.*$/,'');
+  const msgs = {
+    듣기: (v,a) => v>=a ? `긴 이야기를 들어도 내용을 정확하게 파악해요. 듣기 이해력이 ${v>=a+1.5?'최상위':'평균 이상의'} 수준이에요! 👂` : `영어 음원을 매일 꾸준히 듣는 연습을 통해 청취력을 키워나가세요. 조금만 더 하면 금방 올라올 거예요! 👂`,
+    말하기: (v,a) => v>=a ? `하고 싶은 말을 영어로 찾아 표현하려는 태도가 훌륭해요! 상황에 맞는 말을 고르는 능력이 뛰어나요. 👏` : `영어로 말하는 연습을 더 해보세요. 자신감 있게 도전하는 것이 가장 중요해요! 💪`,
+    단어: (v,a) => v>=a ? `다양한 어휘를 문맥 속에서 자연스럽게 익히고 있어요. 표현이 점점 풍부해지고 있어요! 🎨` : `단어 학습을 꾸준히 이어가세요. 책 읽기와 함께 하면 더 효과적이에요! 📖`,
+    읽기: (v,a) => v>=a ? `글의 구조와 흐름을 잘 파악하고 있어요. 더 높은 레벨 도서에도 도전해보세요! 📚` : `현재 레벨에 맞는 책을 꾸준히 읽으면 읽기 실력이 빠르게 올라올 거예요! 📖`,
+    쓰기: (v,a) => v>=a ? `문장 구성 능력이 잘 발달하고 있어요. 짧은 글쓰기 연습을 계속해 나가세요! ✏️` : `기본 문장 구조부터 단계적으로 연습하면 쓰기 실력이 쑥쑥 자랄 거예요! ✏️`,
+  };
+  const titles = {
+    듣기: (v,a) => v>=a+1.5?'최고예요!':v>=a?'잘하고 있어요!':'집중 연습 중!',
+    말하기: (v,a) => v>=a?'소통 능력 UP!':'도전 중!',
+    단어: (v,a) => v>=a?'표현 풍부!':'성장 중!',
+    읽기: (v,a) => v>=a?'독해력 UP!':'다음 도약 준비!',
+    쓰기: (v,a) => v>=a?'실력 향상 중!':'곧 점프!',
+  };
+
+  const cards = keys.map(k => {
+    const v = domains[k];
+    const mine = v.mine, avg = v.avg;
+    const c = DC[k]||'#888', bg = FBG[k]||'#f8f8f8', tc = FTC[k]||'#333';
+    return `<div class="fi" style="background:${bg};border-color:${c}">
+      <div class="fi-title" style="color:${c}">${DI[k]||'•'} ${k} — ${(titles[k]||((v,a)=>v>=a?'우수!':'노력 중!'))(mine,avg)}</div>
+      <div class="fi-score" style="color:${c}">${mine}점<span>/ 10점</span></div>
+      <div class="fi-text" style="color:${tc}">${(msgs[k]||((v,a)=>'꾸준히 성장 중이에요!'))(mine,avg)}</div>
+    </div>`;
+  });
+
+  if (keys.length <= 4) {
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${cards.join('')}</div>`;
+  } else {
+    // 5개: 3+2
+    return `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">${cards.slice(0,3).join('')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${cards.slice(3).join('')}</div>`;
+  }
+}
+
+/* ── 비교 테이블 ── */
+function buildCompareTable(tests, name) {
+  const first = tests[0], latest = tests[tests.length-1];
+  const domainKeys = Object.keys(first.domains||{}).filter(k=>latest.domains?.[k]?.mine!=null);
+
+  const domainRows = domainKeys.map(k => {
+    const fv = first.domains?.[k]?.mine, lv = latest.domains?.[k]?.mine;
+    if (fv==null||lv==null) return '';
+    const diff = (lv-fv).toFixed(1);
+    const up = parseFloat(diff)>=0;
+    return `<tr>
+      <td class="il">${DI[k]||'•'} ${k} 점수</td>
+      <td>${fv}점</td>
+      <td style="font-weight:700;color:${DC[k]||'#333'}">${lv}점</td>
+      <td><span class="b-up">${up?'+':''}${diff}점 ${up?'↑':'↓'}</span></td>
+    </tr>`;
+  }).join('');
+
+  const timeDiff = buildTimeDiffText(tests);
+
+  return `<div class="card">
+    <div class="card-title">📈 와, 이만큼 성장했어요! 🎉</div>
+    <div class="card-sub">${first.date} 첫 테스트 대비 변화</div>
+    <table class="cmp-table">
+      <thead><tr>
+        <th style="text-align:left">비교 항목</th>
+        <th>${first.date}</th>
+        <th>${latest.date}</th>
+        <th>변화</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="il">🏆 최종 레벨</td>
+          <td>${first.totalLevel}</td>
+          <td><span class="b-lv">${latest.totalLevel}</span></td>
+          <td><span class="b-up">${(pLv(latest.totalLevel)-pLv(first.totalLevel))>=0?'⬆️ 레벨 상승':'레벨 변화'}</span></td>
+        </tr>
+        ${domainRows}
+        ${timeDiff ? `<tr><td class="il">⏱️ 테스트 시간</td><td>${first.time||'—'}</td><td style="font-weight:700">${latest.time||'—'}</td><td>${timeDiff}</td></tr>` : ''}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function buildTimeDiff(tests) {
+  if (tests.length < 2) return '';
+  const first = tests[0], latest = tests[tests.length-1];
+  const t1 = parseTime(first.time), t2 = parseTime(latest.time);
+  if (!t1||!t2) return '';
+  const diff = t1-t2;
+  if (diff>0) return `<span class="b-up">⚡ ${Math.floor(diff/60)}분 단축</span>`;
+  return '';
+}
+function buildTimeDiffText(tests) {
+  if (tests.length < 2) return '';
+  const first = tests[0], latest = tests[tests.length-1];
+  const t1 = parseTime(first.time), t2 = parseTime(latest.time);
+  if (!t1||!t2) return '';
+  const diff = t1-t2;
+  if (diff>0) return `<span class="b-up">⚡ ${Math.floor(diff/60)}분 단축!</span>`;
+  return '';
+}
+function parseTime(s) {
+  if (!s) return null;
+  const m = s.match(/(\d+)분\s*(\d+)?초?/);
+  if (!m) return null;
+  return parseInt(m[1])*60 + parseInt(m[2]||0);
+}
+
+function buildNextStep(d, name) {
+  if (!d.nextStep) return '';
+  const firstName = name.replace(/\s.*$/,'');
+  return `<div class="nextstep">
+    <div class="step-badge">📚 추천 단계: ${d.nextStep}</div>
+    <div style="font-size:13px;font-weight:800;color:#1e3a8a;margin-bottom:10px">🗺 앞으로 이렇게 공부해요!</div>
+    <div style="font-size:13px;color:#1e3a8a;line-height:1.85;margin-bottom:14px;word-break:keep-all">
+      ${d.nextStepReason || `${firstName}이에게 딱 맞는 단계예요. 꾸준히 따라가면 실력이 한 단계 더 올라갈 거예요!`}
+    </div>
+  </div>`;
+}
+
+function buildStudentMsg(tests, name) {
+  const firstName = name.replace(/\s.*$/,'');
+  if (tests.length < 2) {
+    const latest = tests[0];
+    return `이번 테스트에서 ${latest.topPercent}라는 멋진 결과를 받았어! 정말 열심히 한 게 느껴져.`;
+  }
+  const first = tests[0], latest = tests[tests.length-1];
+  const domainKeys = Object.keys(first.domains||{}).filter(k=>latest.domains?.[k]?.mine!=null);
+  const bigGain = domainKeys.reduce((best,k) => {
+    const diff = (latest.domains[k]?.mine||0)-(first.domains[k]?.mine||0);
+    return diff > best.diff ? {k, diff} : best;
+  }, {k:null, diff:-99});
+  return bigGain.k
+    ? `${first.date}부터 지금까지 ${DI[bigGain.k]||''} ${bigGain.k} 점수가 ${bigGain.diff.toFixed(1)}점이나 올랐어! 얼마나 열심히 했는지가 그대로 보여.`
+    : `처음 테스트부터 지금까지 꾸준히 성장해왔어! 얼마나 열심히 했는지가 그대로 보여.`;
+}
+
+/* ── UI 유틸 ── */
+function show(id) {
+  ['upload-ui','proc-ui','report-ui','error-ui'].forEach(s => {
+    document.getElementById(s).style.display = s === (id+'-ui') || s === id ? 'block' : 'none';
+  });
+}
+function setMsg(t) { document.getElementById('proc-msg').innerText = t; }
+function resetAll() {
+  files = [];
+  renderFiles();
+  document.getElementById('fab-print').style.display='none';
+  document.getElementById('fab-reset').style.display='none';
+  document.getElementById('report-body').innerHTML='';
+  show('upload');
+}
+</script>
+</body>
+</html>
+
