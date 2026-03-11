@@ -252,7 +252,7 @@ function renderFiles() {
 /* ── API 키 ── */
 function startAnalysis() {
   if (!files.length) return;
-  if (!API_KEY || API_KEY === 'AIzaSyBlRZ0cySBSu_d6CIYmqA9t9WyzSzFl1pE') { alert('관리자에게 Gemini API 키 설정을 요청하세요.'); return; }
+  if (!API_KEY) { alert('API 키가 없습니다.'); return; }
   runAnalysis();
 }
 function confirmKey() { /* 내장 키 버전에서는 사용 안 함 */ }
